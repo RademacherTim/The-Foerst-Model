@@ -1,8 +1,18 @@
 #============================================================================!
 # 
 #----------------------------------------------------------------------------!
-water_suppies   <- Inf
-harv_parameters <- c (0, 1)
+
+# start from clean slate
+#----------------------------------------------------------------------------!
+rm (list = ls ())
+
+# Load necessary dependencies
+#----------------------------------------------------------------------------!
+source ('R/readData.R')
+
+water_supplies   <- Inf      #
+harv_parameters <- c (0, 1) # 
+nspecies <- 2               # Beech is species = 1, spruce is species = 2
 
 start_age   <- 0      # age of the stand at the first observation (does not 
                       # affect simulation); not known for mixed stand data
@@ -50,32 +60,38 @@ HarvestRate  <- 0.0
 
 # set initial size distribution (u) according to first observation
 #----------------------------------------------------------------------------!
+dataSurv <- readDataSurv ()
+dataDead <- readDataDead ()
 for (species in 1:nspecies) {
-  u0 <- 0.001 * # [data_surv{species}(:,1);data_dead{species}(:,1)]; %empirical diameter data is in mm, convert to meters
-  u (1, species) <- sum (u0 <= sizes (1))
+  # empirical diameter data is in mm, convert to meters
+  u0 <- 0.001 * c (dataSurv [[species]] [[1]] [, 1], dataDead [[species]] [[1]] [, 1])
+  u [1, species] <- sum (u0 <= sizes [1])
   for (i in 2:sizeclasses) {
-    k <- (u0 > sizes (i - 1)) & (u0 <= sizes (i))
-    u (i, species) <- round (sum (k) / dx) # convert number of individuals with diameter between sizes(i-1) and sizes (i) to density
+    k <- (u0 > sizes [i - 1]) & (u0 <= sizes [i])
+    u [i, species] <- round (sum (k) / dx) # convert number of individuals with diameter between sizes(i-1) and sizes (i) to density
   }
 }
+
+# Set timer to measure execution time
+#----------------------------------------------------------------------------!
+start.time <- Sys.time ()
 
 # Loop over timesteps
 #----------------------------------------------------------------------------!
 for (t in 1:timesteps) {
-  # calculate portion of light (in [0,1]) arriving at heights corresponding
+  # calculate portion of light (Light) arriving at heights corresponding
   # to different stem diameter sizes
   #--------------------------------------------------------------------------!
   Light <- rep (1, sizeclasses) # Initially assume all are fully illuminated
   for (species in 1:nspecies) {
-    Ind_Light = rep (0, sizeclasses)
-    for (i in seq (sizeclasses-1, -1, by = -1)) {
+    Ind_Light <- rep (0, sizeclasses)
+    for (i in (sizeclasses-1):1) {
       Ind_Light [i] <- Ind_Light [i + 1] + u [i + 1, species] * sizes2 [i + 1]
     }
-    TotalLeafArea (species) <- dx * (Ind_Light [1] + u [1] * sizes2 [1])
+    TotalLeafArea [species] <- dx * (Ind_Light [1] + u [1] * sizes2 [1])
     Ind_Light <- Ind_Light + 0.5 * u [, species] * sizes2
     Light <- Light * exp (lambda [species] * dx * Ind_Light)
   }
-
 
   # gross photosynthetic production assuming no water constraints, if this 
   # exceeds WaterCapacity, then all actual growth is reduced accordingly
@@ -97,17 +113,25 @@ for (t in 1:timesteps) {
     # Death
     MassGrowth <- DiameterGrowth * sizes2
     DeathRate  <- 0.5 * DeathPar [species] / max (0, MassGrowth)
-    DeathRate (isnan (DeathRate)) <- 0
+    DeathRate [is.nan (DeathRate)] <- 0
 
-    GrowthFlux               <- DiameterGrowth * u [, species]
-    GrowthGradient [1]       <- (GrowthFlux [2]     - GrowthFlux [1])       / dx
-    GrowthGradient [end]     <- (GrowthFlux [end]   - GrowthFlux [end-1])   / dx
-    GrowthGradient [2:end-1] <- (GrowthFlux [3:end] - GrowthFlux [1:end-2]) / (2 * dx);
+    end <- sizeclasses
+    GrowthFlux                 <- DiameterGrowth * u [, species]
+    GrowthGradient [1]         <- (GrowthFlux [2]     - GrowthFlux [1])         / dx
+    GrowthGradient [end]       <- (GrowthFlux [end]   - GrowthFlux [end-1])     / dx
+    GrowthGradient [2:(end-1)] <- (GrowthFlux [3:end] - GrowthFlux [1:(end-2)]) / (2 * dx);
 
     #PDE
-    u1     <- max (0, u[ , species] - dt * (GrowthGradient + (DeathRate + HarvestRate) * u [, species])) #"max(0," isnt really necessary here, but an efficient way to force stability
+    #"max(0," isnt really necessary here, but an efficient way to force stability
+    u1     <- max (0, u[ , species] - dt * (GrowthGradient + (DeathRate + HarvestRate) * u [, species])) 
     u1 [1] <- ReproductionRate [species] * TotalLeafArea [species] # birth of new trees
     u [, species] <- u1
   }
 }
+
+# Determine time it took to run
+#----------------------------------------------------------------------------!
+end.time   <- Sys.time ()
+time.taken <- end.time - start.time
+time.taken
 #============================================================================!
