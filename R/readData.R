@@ -1,5 +1,9 @@
 #============================================================================!
-# Read all_sites_data.met and convert it to Rdata
+# Read empirical data for beech and spruce from the permanent sampling plots 
+# surveyed by the Technische Universitaät München (TUM) from 1848? to present.
+# 
+# The data is used for evaluation of the först model (först_model.R) of forest 
+# size distributions.
 #----------------------------------------------------------------------------!
 library (R.matlab)
 #library (tibble)

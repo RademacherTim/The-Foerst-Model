@@ -1,5 +1,14 @@
 #============================================================================!
-# 
+# The först model simulates forest size distribution employing a set of 
+# partial differential equations (PDE)
+#----------------------------------------------------------------------------!
+#     developed by:
+#     Robert Beyer    (rb792@cam.ac.uk)
+#     Tim Rademacher  (trademacher@fas.harvard.edu)
+#    
+#     initially parameterised and evaluated against permanent plot 
+#     measurements of beech and spruce from the Technische Universität 
+#     München (TUM) from 1848? to present.
 #----------------------------------------------------------------------------!
 
 # start from clean slate
@@ -46,7 +55,6 @@ if (validationNOTlongterm) {
   years <- checkpoints [length (checkpoints)]  # number of years simulated
 }
 timesteps   <- ceiling (years / dt)   # number of time steps in simulation
-timesteps   <- 7 / dt
 
 # Set initial values to zero
 #----------------------------------------------------------------------------!
@@ -57,8 +65,8 @@ GrowthGradient <- rep (0, sizeclasses)
 DiameterGrowth <- rep (0, sizeclasses)
 DeathRate      <- rep (0, sizeclasses)
 u              <- matrix (rep (0, nspecies * sizeclasses), nrow = sizeclasses)
-u1             <- rep (0, sizeclasses)
 v              <- matrix (rep (0, nspecies * sizeclasses), nrow = sizeclasses)
+u1             <- rep (0, sizeclasses)
 
 # Species parameters for 
 #     - beech  (first  entry)
@@ -80,17 +88,32 @@ HarvestIndex <- ceiling (harv_parameters [1] * sizeclasses)
 RegenYears   <- harv_parameters [2]
 HarvestRate  <- 0.0
 
-# set initial size distribution (u) according to first observation
+# function to determine empirical size distribution (v)
 #----------------------------------------------------------------------------!
-for (species in 1:nspecies) {
-  # empirical diameter data is in mm, convert to meters
-  u0 <- 0.001 * c (dataSurv [[species]] [[1]] [, 1], dataDead [[species]] [[1]] [, 1])
-  u [1, species] <- sum (u0 <= sizes [1], na.rm = T)
-  for (i in 2:sizeclasses) {
-    k <- (u0 > sizes [i - 1]) & (u0 <= sizes [i])
-    u [i, species] <- round (sum (k, na.rm = T) / dx) # convert number of individuals with diameter between sizes (i-1) and sizes (i) to density
+getEmpiricalSizeDistribution <- function (k0, 
+                                          inNspecies = nspecies,
+                                          inSizes = sizes, 
+                                          inSizeclasses = sizeclasses, 
+                                          inDataSurv = dataSurv, 
+                                          inDataDead = dataDead,
+                                          inDx       = dx) {
+  # initialise size distribution as 0 
+  v <- matrix (rep (0, inNspecies * inSizeclasses), nrow = inSizeclasses)
+  # loop over species
+  for (inSpecies in 1:inNspecies) {
+    # get empirical diameter data and convert units from [mm] to [m]
+    v0 <- 0.001 * c (inDataSurv [[inSpecies]] [[1]] [, k0], inDataDead [[inSpecies]] [[1]] [, k0])
+    v [1, inSpecies] <- sum (v0 <= inSizes [1], na.rm = T)
+    for (i in 2:inSizeclasses) {
+      k <- (v0 > inSizes [i - 1]) & (v0 <= inSizes [i])
+      v [i, inSpecies] <- round (sum (k, na.rm = T) / dx) # convert number of individuals with diameter between sizes (i-1) and sizes (i) to density
+    }
   }
+  return (v)
 }
+
+# set initial model conditions as first empirical measurements
+u <- getEmpiricalSizeDistribution (1)
 
 # function for ploting size distribution
 #----------------------------------------------------------------------------!
@@ -98,24 +121,24 @@ pl.sizeDistribution <- function (u, v, sizes, y_max = 4000, title) {
   plot (x     = sizes,
         y     = u [, 1],
         xlab  = 'dbh [m]',
-        ylab  = 'number of trees',
+        ylab  = '',
         xlim  = c (0, 1.5),
         ylim  = c (0, y_max),
         typ   = 'l',
         col   = 'blue',
-        lty   = 2,
         las   = 1,
         main = title)
   lines (x    = sizes,
          y    = u [, 2],
-         col  = 'red',
-         lty  = 2)
+         col  = 'red')
   lines (x    = sizes,
          y    = v [, 1],
-         col  = 'blue')
+         col  = 'blue',
+         lty  = 2)
   lines (x    = sizes,
          y    = v [, 2],
-         col  = 'red')
+         col  = 'red',
+         lty   = 2)
 }
 y_maxs <- c (4000, 2000, 1000, 600, 600, 600, 400, 400, 300)
 
@@ -127,11 +150,6 @@ pl.sizeDistribution (u = u, v = u, sizes = sizes, y_max = 4000, title = '0 years
 # Set timer to measure execution time
 #----------------------------------------------------------------------------!
 start.time <- Sys.time ()
-
-# Function to calculate incident light upon the trees of sizeclass i
-#calcLayer <- function (species, i, sizes2 = sizes2) {
-#  Ind_Light [i] <- Ind_Light [i + 1] + u [i + 1, species] * sizes2 [i + 1]
-#}
 
 # Loop over timesteps
 #----------------------------------------------------------------------------!
@@ -154,7 +172,7 @@ for (t in 1:timesteps) {
   # exceeds WaterCapacity, then all actual growth is reduced accordingly
   PotentialProduction <- 0
   for (species in 1:nspecies) {
-    PotentialProduction <- PotentialProduction + sum (GrowthRate [species] * Light * u [i, species] * sizes2) * dx  
+    PotentialProduction <- PotentialProduction + sum (GrowthRate [species] * Light * u [, species] * sizes2) * dx  
   }
 
   for (species in 1:nspecies) {
@@ -172,15 +190,14 @@ for (t in 1:timesteps) {
     DeathRate [is.nan (DeathRate)] <- 0
 
     end <- sizeclasses
-    # The error seemed to have been downstream of this
     GrowthFlux                 <- DiameterGrowth * u [, species]
     GrowthGradient [1]         <- (GrowthFlux [2]     - GrowthFlux [1])         / dx
     GrowthGradient [end]       <- (GrowthFlux [end]   - GrowthFlux [end-1])     / dx
     GrowthGradient [2:(end-1)] <- (GrowthFlux [3:end] - GrowthFlux [1:(end-2)]) / (2 * dx);
 
-    #PDE
-    #"max(0," isnt really necessary here, but an efficient way to force stability
-    u1     <- max (0, u[ , species] - dt * (GrowthGradient + (DeathRate + HarvestRate) * u [, species])) 
+    #Partial Differential Equation
+    #"pmax(0," isnt really necessary here, but an efficient way to force stability
+    u1     <- pmax (0, u [, species] - dt * (GrowthGradient + (DeathRate + HarvestRate) * u [, species])) 
     u1 [1] <- ReproductionRate [species] * TotalLeafArea [species] # birth of new trees
     u [, species] <- u1
   }
@@ -189,16 +206,7 @@ for (t in 1:timesteps) {
   k0 <- which (t * dt == checkpoints) # checkpoints [k0] = t*dt, if there is such a k0
   if (!isempty (k0)) {
     if (validationNOTlongterm) {
-      for (species in 1:nspecies) {
-        # empirical diameter data is in mm, convert to meters
-        v0 <- 0.001 * c (dataSurv [[species]] [[1]] [, k0], dataDead [[species]] [[1]] [, k0])
-        v [1, species] <- round (sum (v0 <= sizes [1], na.rm = T) / dx)
-        for (i in 2:sizeclasses) {
-          k <- (v0 > sizes [i - 1]) & (v0 <= sizes [i])
-          v [i, species] <- round (sum (k, na.rm = T) / dx) # convert number of individuals with diameter between sizes (i-1) and sizes (i) to density
-        }
-      }
-      print (c (u, v))
+      v <- getEmpiricalSizeDistribution (k0)
       pl.sizeDistribution (u = u, v = v, sizes = sizes, y_max = y_maxs [k0],
                            title = paste (as.character (checkpoints [k0]), ' years', sep = ''))     
     }

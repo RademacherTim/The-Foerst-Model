@@ -16,14 +16,14 @@ sizeclasses = length(sizes); %number of different stem sizes considered
 dt = 0.1; %time step, in years
 
 %the following is only for plotting
-%if validationNOTlongterm
-%    checkpoints = time-time(1); %points in simulation time at which empirical data is available
-%    checkpoints(4) = []; %ignore this one to allow 3x3 plot
-%    years = checkpoints(end); %number of years simulated
-%else        
-%    checkpoints = [time(end)-time(1);[125 200 300 500 1000]']; %last point for which empirical data is available, and several years after that
-%    years = checkpoints(end); %number of years simulated
-%end
+if validationNOTlongterm
+    checkpoints = time-time(1); %points in simulation time at which empirical data is available
+    checkpoints(4) = []; %ignore this one to allow 3x3 plot
+    years = checkpoints(end); %number of years simulated
+else        
+    checkpoints = [time(end)-time(1);[125 200 300 500 1000]']; %last point for which empirical data is available, and several years after that
+    years = checkpoints(end); %number of years simulated
+end
 timesteps = ceil(years/dt); %number of time steps in simulation
 
 Light = zeros(sizeclasses,1);
