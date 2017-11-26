@@ -163,7 +163,7 @@ for (t in 1:timesteps) {
     for (i in (sizeclasses-1):1) {
       Ind_Light [i] <- Ind_Light [i + 1] + u [i + 1, species] * sizes2 [i + 1]
     }
-    TotalLeafArea [species] <- dx * (Ind_Light [1] + u [1] * sizes2 [1])
+    TotalLeafArea [species] <- dx * (Ind_Light [1] + u [1] * sizes2 [1]) # TTR Should this not be u[1, species]? Maybe I missunderstand the matlab semantics.
     Ind_Light <- Ind_Light + 0.5 * u [, species] * sizes2
     Light <- Light * exp (lambda [species] * dx * Ind_Light)
   }
@@ -197,9 +197,9 @@ for (t in 1:timesteps) {
 
     #Partial Differential Equation
     #"pmax(0," isnt really necessary here, but an efficient way to force stability
-    u1     <- pmax (0, u [, species] - dt * (GrowthGradient + (DeathRate + HarvestRate) * u [, species])) 
-    u1 [1] <- ReproductionRate [species] * TotalLeafArea [species] # birth of new trees
-    u [, species] <- u1
+    u1              <- pmax (0, u [, species] - dt * (GrowthGradient + (DeathRate + HarvestRate) * u [, species])) 
+    u1 [1, species] <- ReproductionRate [species] * TotalLeafArea [species] # birth of new trees # Introduce [, species]
+    u [, species]   <- u1
   }
 
   # Plot the size distribution
